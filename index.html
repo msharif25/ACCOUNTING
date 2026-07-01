@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#faf8ef">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="mobile-web-app-capable" content="yes">
+<title>2048</title>
+<link rel="manifest" href="data:application/json,%7B%22name%22%3A%222048%22%2C%22short_name%22%3A%222048%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23faf8ef%22%2C%22theme_color%22%3A%22%23faf8ef%22%2C%22start_url%22%3A%22.%22%7D">
+<style>
+  :root {
+    --bg: #faf8ef;
+    --board-bg: #bbada0;
+    --cell-bg: #cdc1b4;
+    --text-dark: #776e65;
+    --text-light: #f9f6f2;
+    --gap: 2.5vmin;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    height: 100%;
+    overscroll-behavior: none;
+    touch-action: none;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text-dark);
+    font-family: "Clear Sans", "Helvetica Neue", Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100%;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .game {
+    width: min(92vmin, 500px);
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 2vmin;
+    gap: 2vmin;
+  }
+
+  h1 {
+    font-size: min(13vmin, 64px);
+    font-weight: 800;
+    line-height: 1;
+    color: var(--text-dark);
+  }
+
+  .scores { display: flex; gap: 1.5vmin; }
+
+  .score-box {
+    background: var(--board-bg);
+    border-radius: 1.2vmin;
+    padding: 1.2vmin 2.4vmin;
+    text-align: center;
+    color: var(--text-light);
+    min-width: 20vmin;
+    position: relative;
+  }
+  .score-box .label {
+    font-size: min(2.6vmin, 13px);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #eee4da;
+    font-weight: 700;
+  }
+  .score-box .value {
+    font-size: min(4.6vmin, 24px);
+    font-weight: 800;
+  }
+  .score-add {
+    position: absolute;
+    left: 0; right: 0; top: 0.6vmin;
+    color: rgba(119,110,101,0.9);
+    font-weight: 800;
+    font-size: min(4vmin, 20px);
+    animation: floatUp 0.7s ease-out both;
+    pointer-events: none;
+  }
+  @keyframes floatUp {
+    0% { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(-3vmin); }
+  }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 2vmin;
+    gap: 2vmin;
+  }
+  .tagline { font-size: min(3.2vmin, 15px); color: var(--text-dark); line-height: 1.3; }
+  .tagline b { font-weight: 800; }
+
+  button.new-game {
+    background: #8f7a66;
+    color: var(--text-light);
+    border: none;
+    border-radius: 1.2vmin;
+    padding: 1.6vmin 3vmin;
+    font-size: min(3.4vmin, 16px);
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  button.new-game:active { background: #7c6a58; }
+
+  .board-wrap { position: relative; width: 100%; }
+
+  .board {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    background: var(--board-bg);
+    border-radius: 2vmin;
+    padding: var(--gap);
+  }
+
+  .grid-bg {
+    position: absolute;
+    inset: var(--gap);
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(4, 1fr);
+    gap: var(--gap);
+  }
+  .grid-cell { background: var(--cell-bg); border-radius: 1.4vmin; }
+
+  .tiles { position: absolute; inset: var(--gap); }
+
+  .tile {
+    position: absolute;
+    width: var(--tile-size);
+    height: var(--tile-size);
+    border-radius: 1.4vmin;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    background: #eee4da;
+    color: var(--text-dark);
+    transition: transform 0.12s ease-in-out;
+    will-change: transform;
+  }
+  .tile .inner {
+    font-size: var(--tile-font);
+    line-height: 1;
+  }
+
+  .tile.new .inner { animation: appear 0.18s ease-out both; }
+  @keyframes appear { 0% { transform: scale(0); } 100% { transform: scale(1); } }
+
+  .tile.merged .inner { animation: pop 0.16s ease-out; }
+  @keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.22); } 100% { transform: scale(1); } }
+
+  .t2    { background:#eee4da; }
+  .t4    { background:#ede0c8; }
+  .t8    { background:#f2b179; color:var(--text-light); }
+  .t16   { background:#f59563; color:var(--text-light); }
+  .t32   { background:#f67c5f; color:var(--text-light); }
+  .t64   { background:#f65e3b; color:var(--text-light); }
+  .t128  { background:#edcf72; color:var(--text-light); }
+  .t256  { background:#edcc61; color:var(--text-light); }
+  .t512  { background:#edc850; color:var(--text-light); }
+  .t1024 { background:#edc53f; color:var(--text-light); }
+  .t2048 { background:#edc22e; color:var(--text-light); }
+  .tbig  { background:#3c3a32; color:var(--text-light); }
+
+  .overlay {
+    position: absolute;
+    inset: 0;
+    border-radius: 2vmin;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2.5vmin;
+    background: rgba(238, 228, 218, 0.73);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+    z-index: 5;
+  }
+  .overlay.show { opacity: 1; pointer-events: auto; }
+  .overlay.win { background: rgba(237, 194, 46, 0.5); }
+  .overlay .msg { font-size: min(9vmin, 44px); font-weight: 800; color: var(--text-dark); }
+  .overlay.win .msg { color: var(--text-light); }
+  .overlay button {
+    background: #8f7a66;
+    color: var(--text-light);
+    border: none;
+    border-radius: 1.2vmin;
+    padding: 1.8vmin 4vmin;
+    font-size: min(3.6vmin, 17px);
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .overlay .keep {
+    background: transparent;
+    color: var(--text-dark);
+    text-decoration: underline;
+    padding: 0.5vmin;
+    font-size: min(3.2vmin, 15px);
+  }
+
+  footer {
+    margin-top: 2.5vmin;
+    font-size: min(2.9vmin, 13px);
+    color: #a89c8f;
+    text-align: center;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+  <div class="game">
+    <header>
+      <h1>2048</h1>
+      <div class="scores">
+        <div class="score-box"><div class="label">Score</div><div class="value" id="score">0</div></div>
+        <div class="score-box"><div class="label">Best</div><div class="value" id="best">0</div></div>
+      </div>
+    </header>
+
+    <div class="toolbar">
+      <div class="tagline">Swipe to move tiles.<br>Merge same numbers to reach <b>2048</b>!</div>
+      <button class="new-game" id="newGame">New Game</button>
+    </div>
+
+    <div class="board-wrap">
+      <div class="board" id="board">
+        <div class="grid-bg" id="gridBg"></div>
+        <div class="tiles" id="tiles"></div>
+        <div class="overlay" id="overlay">
+          <div class="msg" id="overlayMsg">Game Over</div>
+          <button id="overlayBtn">Try Again</button>
+          <button class="keep" id="keepGoing" style="display:none">Keep going</button>
+        </div>
+      </div>
+    </div>
+
+    <footer>Use arrow keys on desktop, swipe on mobile.<br>Tap "New Game" to restart anytime.</footer>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+
+  const SIZE = 4;
+  const boardEl = document.getElementById("board");
+  const gridBg = document.getElementById("gridBg");
+  const tilesEl = document.getElementById("tiles");
+  const scoreEl = document.getElementById("score");
+  const bestEl = document.getElementById("best");
+  const overlay = document.getElementById("overlay");
+  const overlayMsg = document.getElementById("overlayMsg");
+  const overlayBtn = document.getElementById("overlayBtn");
+  const keepGoingBtn = document.getElementById("keepGoing");
+
+  let grid = [];        // 2D array of tile objects or null
+  let score = 0;
+  let best = 0;
+  let tileId = 0;
+  let won = false;
+  let keepPlaying = false;
+  let busy = false;     // lock input while animating
+
+  // ---- persistence ----
+  function load() {
+    try {
+      best = parseInt(localStorage.getItem("best2048") || "0", 10) || 0;
+      const saved = JSON.parse(localStorage.getItem("state2048") || "null");
+      if (saved && saved.grid) {
+        score = saved.score || 0;
+        won = saved.won || false;
+        keepPlaying = saved.keepPlaying || false;
+        grid = saved.grid.map(row => row.map(v => v ? makeTile(v.value, v.r, v.c) : null));
+        return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+  function save() {
+    try {
+      localStorage.setItem("best2048", String(best));
+      localStorage.setItem("state2048", JSON.stringify({
+        score, won, keepPlaying,
+        grid: grid.map(row => row.map(t => t ? { value: t.value, r: t.r, c: t.c } : null))
+      }));
+    } catch (e) {}
+  }
+
+  // ---- tile helpers ----
+  function makeTile(value, r, c) {
+    return { id: ++tileId, value, r, c, el: null, merged: false, isNew: false };
+  }
+
+  function emptyGrid() {
+    grid = [];
+    for (let r = 0; r < SIZE; r++) {
+      grid.push(new Array(SIZE).fill(null));
+    }
+  }
+
+  function emptyCells() {
+    const cells = [];
+    for (let r = 0; r < SIZE; r++)
+      for (let c = 0; c < SIZE; c++)
+        if (!grid[r][c]) cells.push({ r, c });
+    return cells;
+  }
+
+  // deterministic-ish random using time; fine for a game
+  function rnd(n) { return Math.floor(Math.random() * n); }
+
+  function addRandomTile() {
+    const cells = emptyCells();
+    if (!cells.length) return null;
+    const { r, c } = cells[rnd(cells.length)];
+    const value = Math.random() < 0.9 ? 2 : 4;
+    const t = makeTile(value, r, c);
+    t.isNew = true;
+    grid[r][c] = t;
+    return t;
+  }
+
+  // ---- rendering ----
+  function buildGridBg() {
+    gridBg.innerHTML = "";
+    for (let i = 0; i < SIZE * SIZE; i++) {
+      const d = document.createElement("div");
+      d.className = "grid-cell";
+      gridBg.appendChild(d);
+    }
+  }
+
+  function tileClass(value) {
+    if (value <= 2048) return "t" + value;
+    return "tbig";
+  }
+  function fontFor(value) {
+    const digits = String(value).length;
+    if (digits <= 2) return "min(9vmin, 46px)";
+    if (digits === 3) return "min(7vmin, 36px)";
+    if (digits === 4) return "min(5.5vmin, 30px)";
+    return "min(4.4vmin, 24px)";
+  }
+
+  function positionFor(r, c) {
+    // percentages within the tiles container (which already has gap padding)
+    const step = 100 / SIZE;
+    return { x: c * step, y: r * step };
+  }
+
+  function updateTileSizeVars() {
+    // tile size as fraction accounting for gaps handled via translate percentages
+    const gap = getComputedStyle(document.documentElement).getPropertyValue("--gap");
+    boardEl.style.setProperty("--tile-size", `calc((100% - ${SIZE - 1} * ${gap}) / ${SIZE})`);
+  }
+
+  function renderTileEl(t) {
+    const el = document.createElement("div");
+    el.className = "tile " + tileClass(t.value);
+    if (t.isNew) el.classList.add("new");
+    el.style.setProperty("--tile-font", fontFor(t.value));
+    const inner = document.createElement("div");
+    inner.className = "inner";
+    inner.textContent = t.value;
+    el.appendChild(inner);
+    positionEl(el, t.r, t.c);
+    tilesEl.appendChild(el);
+    t.el = el;
+    return el;
+  }
+
+  function positionEl(el, r, c) {
+    const gap = getComputedStyle(document.documentElement).getPropertyValue("--gap");
+    // each tile occupies size = (100% - 3*gap)/4 ; offset = index * (size + gap)
+    const offX = `calc(${c} * ((100% - ${SIZE - 1} * ${gap}) / ${SIZE} + ${gap}))`;
+    const offY = `calc(${r} * ((100% - ${SIZE - 1} * ${gap}) / ${SIZE} + ${gap}))`;
+    el.style.transform = `translate(${offX}, ${offY})`;
+  }
+
+  function fullRender() {
+    tilesEl.innerHTML = "";
+    updateTileSizeVars();
+    for (let r = 0; r < SIZE; r++)
+      for (let c = 0; c < SIZE; c++)
+        if (grid[r][c]) { grid[r][c].isNew = false; renderTileEl(grid[r][c]); }
+    scoreEl.textContent = score;
+    bestEl.textContent = best;
+  }
+
+  function flashScore(add) {
+    if (add <= 0) return;
+    const box = scoreEl.parentElement;
+    const s = document.createElement("div");
+    s.className = "score-add";
+    s.textContent = "+" + add;
+    box.appendChild(s);
+    setTimeout(() => s.remove(), 700);
+  }
+
+  // ---- movement logic ----
+  // Build traversal order per direction. dir: 'up','down','left','right'
+  function move(dir) {
+    if (busy) return;
+    const vectors = {
+      up:    { dr: -1, dc: 0 },
+      down:  { dr: 1, dc: 0 },
+      left:  { dr: 0, dc: -1 },
+      right: { dr: 0, dc: 1 }
+    };
+    const v = vectors[dir];
+    if (!v) return;
+
+    const order = buildTraversal(v);
+    let moved = false;
+    let gained = 0;
+
+    // reset merge flags
+    for (let r = 0; r < SIZE; r++)
+      for (let c = 0; c < SIZE; c++)
+        if (grid[r][c]) grid[r][c].merged = false;
+
+    for (const cell of order) {
+      const t = grid[cell.r][cell.c];
+      if (!t) continue;
+      let { r, c } = cell;
+      let nr = r, nc = c;
+      // find farthest empty + check merge target
+      while (true) {
+        const tr = nr + v.dr, tc = nc + v.dc;
+        if (tr < 0 || tr >= SIZE || tc < 0 || tc >= SIZE) break;
+        if (!grid[tr][tc]) { nr = tr; nc = tc; continue; }
+        // occupied: merge?
+        const other = grid[tr][tc];
+        if (other.value === t.value && !other.merged && !t.merged) {
+          // merge t into other
+          grid[r][c] = null;
+          other.value *= 2;
+          other.merged = true;
+          gained += other.value;
+          if (other.value === 2048 && !won) { won = true; }
+          // animate: move t to other's cell then remove
+          moveTileEl(t, tr, tc, () => { if (t.el) t.el.remove(); });
+          // update other's element
+          updateMergedEl(other);
+          moved = true;
+        }
+        break;
+      }
+      if ((nr !== r || nc !== c) && grid[r][c] === t) {
+        grid[r][c] = null;
+        grid[nr][nc] = t;
+        t.r = nr; t.c = nc;
+        moveTileEl(t, nr, nc);
+        moved = true;
+      } else if (grid[r][c] === t) {
+        t.r = r; t.c = c;
+      }
+    }
+
+    if (moved) {
+      busy = true;
+      score += gained;
+      if (score > best) best = score;
+      flashScore(gained);
+      scoreEl.textContent = score;
+      bestEl.textContent = best;
+      // after slide animation, spawn new tile & check state
+      setTimeout(() => {
+        const t = addRandomTile();
+        if (t) renderTileEl(t);
+        busy = false;
+        save();
+        checkState();
+      }, 130);
+    }
+  }
+
+  function buildTraversal(v) {
+    const rows = [], cols = [];
+    for (let i = 0; i < SIZE; i++) { rows.push(i); cols.push(i); }
+    // move toward direction: process tiles nearest the wall first
+    if (v.dr === 1) rows.reverse();
+    if (v.dc === 1) cols.reverse();
+    const order = [];
+    for (const r of rows)
+      for (const c of cols)
+        order.push({ r, c });
+    return order;
+  }
+
+  function moveTileEl(t, r, c, done) {
+    if (!t.el) { if (done) done(); return; }
+    positionEl(t.el, r, c);
+    if (done) setTimeout(done, 130);
+  }
+
+  function updateMergedEl(t) {
+    if (!t.el) return;
+    // update after the slide so the number changes as tiles meet
+    setTimeout(() => {
+      if (!t.el) return;
+      t.el.className = "tile " + tileClass(t.value) + " merged";
+      t.el.style.setProperty("--tile-font", fontFor(t.value));
+      const inner = t.el.querySelector(".inner");
+      if (inner) inner.textContent = t.value;
+      // bring merged tile above the one sliding into it
+      t.el.style.zIndex = 2;
+      setTimeout(() => { if (t.el) { t.el.classList.remove("merged"); t.el.style.zIndex = ""; } }, 180);
+    }, 110);
+  }
+
+  // ---- game state ----
+  function movesAvailable() {
+    if (emptyCells().length) return true;
+    for (let r = 0; r < SIZE; r++)
+      for (let c = 0; c < SIZE; c++) {
+        const t = grid[r][c];
+        if (!t) continue;
+        if (c + 1 < SIZE && grid[r][c + 1] && grid[r][c + 1].value === t.value) return true;
+        if (r + 1 < SIZE && grid[r + 1][c] && grid[r + 1][c].value === t.value) return true;
+      }
+    return false;
+  }
+
+  function checkState() {
+    if (won && !keepPlaying) {
+      showOverlay("You win!", true);
+      return;
+    }
+    if (!movesAvailable()) {
+      showOverlay("Game Over", false);
+    }
+  }
+
+  function showOverlay(msg, isWin) {
+    overlayMsg.textContent = msg;
+    overlay.classList.toggle("win", isWin);
+    overlay.classList.add("show");
+    keepGoingBtn.style.display = isWin ? "inline" : "none";
+    overlayBtn.textContent = isWin ? "New Game" : "Try Again";
+  }
+  function hideOverlay() {
+    overlay.classList.remove("show", "win");
+  }
+
+  // ---- controls ----
+  function newGame() {
+    hideOverlay();
+    score = 0;
+    won = false;
+    keepPlaying = false;
+    busy = false;
+    emptyGrid();
+    const a = addRandomTile();
+    const b = addRandomTile();
+    fullRender();
+    save();
+  }
+
+  overlayBtn.addEventListener("click", newGame);
+  document.getElementById("newGame").addEventListener("click", newGame);
+  keepGoingBtn.addEventListener("click", () => { keepPlaying = true; hideOverlay(); save(); });
+
+  // keyboard
+  window.addEventListener("keydown", (e) => {
+    const map = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right",
+                  w: "up", s: "down", a: "left", d: "right" };
+    const dir = map[e.key];
+    if (dir) { e.preventDefault(); move(dir); }
+  });
+
+  // touch / swipe
+  let touchStart = null;
+  boardEl.addEventListener("touchstart", (e) => {
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    touchStart = { x: t.clientX, y: t.clientY };
+  }, { passive: true });
+
+  boardEl.addEventListener("touchend", (e) => {
+    if (!touchStart) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchStart.x;
+    const dy = t.clientY - touchStart.y;
+    touchStart = null;
+    const absX = Math.abs(dx), absY = Math.abs(dy);
+    const threshold = 24;
+    if (Math.max(absX, absY) < threshold) return;
+    if (absX > absY) move(dx > 0 ? "right" : "left");
+    else move(dy > 0 ? "down" : "up");
+  }, { passive: true });
+
+  // also support swipe anywhere on screen for comfort
+  let bodyStart = null;
+  window.addEventListener("touchstart", (e) => {
+    if (e.target.closest("button")) return;
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    bodyStart = { x: t.clientX, y: t.clientY, onBoard: !!e.target.closest("#board") };
+  }, { passive: true });
+  window.addEventListener("touchend", (e) => {
+    if (!bodyStart || bodyStart.onBoard) { bodyStart = null; return; }
+    const t = e.changedTouches[0];
+    const dx = t.clientX - bodyStart.x;
+    const dy = t.clientY - bodyStart.y;
+    bodyStart = null;
+    const absX = Math.abs(dx), absY = Math.abs(dy);
+    if (Math.max(absX, absY) < 24) return;
+    if (absX > absY) move(dx > 0 ? "right" : "left");
+    else move(dy > 0 ? "down" : "up");
+  }, { passive: true });
+
+  // re-position tiles on resize (percentages handle most of it, but recalc font/size vars)
+  window.addEventListener("resize", () => {
+    updateTileSizeVars();
+    for (let r = 0; r < SIZE; r++)
+      for (let c = 0; c < SIZE; c++)
+        if (grid[r][c] && grid[r][c].el) positionEl(grid[r][c].el, r, c);
+  });
+
+  // ---- init ----
+  buildGridBg();
+  if (load()) {
+    fullRender();
+    // if a finished/won state was saved, reflect it
+    if (won && !keepPlaying) showOverlay("You win!", true);
+    else if (!movesAvailable()) showOverlay("Game Over", false);
+  } else {
+    newGame();
+  }
+})();
+</script>
+</body>
+</html>
