@@ -30,14 +30,14 @@
   .chip .k { opacity:.7; font-weight:600; margin-right:5px; }
 
   /* speedometer */
-  #speedo { position:fixed; z-index:6; right:calc(10px + env(safe-area-inset-right));
-    bottom:calc(14px + env(safe-area-inset-bottom)); width:132px; height:132px; pointer-events:none;
+  #speedo { position:fixed; z-index:6; right:calc(12px + env(safe-area-inset-right));
+    bottom:calc(112px + env(safe-area-inset-bottom)); width:112px; height:112px; pointer-events:none;
     filter:drop-shadow(0 3px 8px rgba(0,0,0,.4)); }
   #speedo .val { font-weight:800; }
 
   /* minimap */
-  #map { position:fixed; z-index:6; left:calc(10px + env(safe-area-inset-left));
-    bottom:calc(14px + env(safe-area-inset-bottom)); width:104px; height:132px;
+  #map { position:fixed; z-index:6; left:calc(12px + env(safe-area-inset-left));
+    bottom:calc(104px + env(safe-area-inset-bottom)); width:90px; height:114px;
     background:rgba(15,22,34,.55); border:1px solid rgba(255,255,255,.16); border-radius:12px;
     filter:drop-shadow(0 3px 8px rgba(0,0,0,.35)); }
 
@@ -47,9 +47,9 @@
   .air.show { opacity:1; }
 
   /* ---- touch controls ---- */
-  .pad { position:fixed; bottom:calc(20px + env(safe-area-inset-bottom)); display:flex; gap:14px; z-index:5; }
-  .pad.left  { left:calc(120px + env(safe-area-inset-left)); }
-  .pad.right { right:calc(150px + env(safe-area-inset-right)); }
+  .pad { position:fixed; bottom:calc(18px + env(safe-area-inset-bottom)); display:flex; gap:12px; z-index:5; }
+  .pad.left  { left:calc(12px + env(safe-area-inset-left)); }
+  .pad.right { right:calc(12px + env(safe-area-inset-right)); }
   .key { width:70px; height:70px; border-radius:50%;
     background:rgba(20,24,32,.34); border:2px solid rgba(255,255,255,.34);
     color:#fff; font-size:24px; font-weight:800; display:flex; align-items:center; justify-content:center;
@@ -59,8 +59,9 @@
   .key.brake{ background:rgba(200,70,70,.38); font-size:13px; }
   .key.pressed { background:rgba(255,255,255,.55); color:#111; transform:scale(.93); }
   .pad.left.hidden { display:none; }
-  .hint2 { position:fixed; bottom:calc(116px + env(safe-area-inset-bottom)); left:0; right:0; text-align:center;
-    color:rgba(255,255,255,.85); font-size:12px; text-shadow:0 1px 4px rgba(0,0,0,.5); pointer-events:none;
+  .hint2 { position:fixed; top:calc(150px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%);
+    max-width:70vw; text-align:center;
+    color:rgba(255,255,255,.9); font-size:12px; text-shadow:0 1px 5px rgba(0,0,0,.6); pointer-events:none;
     transition:opacity .5s; z-index:5; }
   .hint2.hide { opacity:0; }
 
