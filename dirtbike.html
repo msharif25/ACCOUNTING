@@ -111,7 +111,7 @@
   <div class="air" id="airMsg"></div>
   <button class="reset" id="resetBtn">↺ Reset</button>
 
-  <div class="hint2" id="hint2">Hold GAS · steer to lean · in the air GAS = lean back for backflips</div>
+  <div class="hint2" id="hint2">Hold GAS to ride · steer to lean · in the air, GAS leans back &amp; BRAKE noses down</div>
 
   <div class="pad left" id="steerPad">
     <div class="key" id="kLeft">◀</div>
@@ -202,12 +202,33 @@
   // ===================== ENGINE =====================
   const appEl=document.getElementById('app');
   let renderer,scene,camera,sun;
+  let TOON=null;                       // cel-shading gradient ramp
   const bike={g:null,wheels:[],rider:null};
+
+  function makeToonRamp(){
+    const c=document.createElement('canvas'); c.width=4; c.height=1; const g=c.getContext('2d');
+    const steps=['#585858','#9a9a9a','#c8c8c8','#ffffff'];
+    for(let i=0;i<4;i++){ g.fillStyle=steps[i]; g.fillRect(i,0,1,1); }
+    const t=new THREE.CanvasTexture(c); t.minFilter=THREE.NearestFilter; t.magFilter=THREE.NearestFilter;
+    t.generateMipmaps=false; return t;
+  }
+  // add crisp black inverted-hull outlines to a model for a cartoon pop
+  function addOutlines(root, thickness){
+    const mat=new THREE.MeshBasicMaterial({color:0x14140f, side:THREE.BackSide});
+    const jobs=[];
+    root.traverse(o=>{ if(o.isMesh) jobs.push(o); });
+    for(const o of jobs){
+      const ol=new THREE.Mesh(o.geometry, mat);
+      ol.position.copy(o.position); ol.quaternion.copy(o.quaternion);
+      ol.scale.copy(o.scale).multiplyScalar(thickness||1.08);
+      o.parent.add(ol);
+    }
+  }
 
   const S={ x:0,z:0,y:0,vy:0,speed:0,yaw:0, grounded:true,
     lean:0,airPitch:0,airPitchVel:0,pitchGround:0,rollGround:0,
     airborne:false,airTime:0,bestAir:0,flips:0,spinAccum:0,
-    wheelSpin:0,crashed:false,crashT:0, time:0,finished:false };
+    wheelSpin:0,crashed:false,crashT:0, time:0,finished:false, landSquash:0 };
 
   const input={throttle:false,brake:false,left:false,right:false};
   let steerMode='buttons';
@@ -289,8 +310,8 @@
     const geo=new THREE.PlaneGeometry(W,L,WS,LS); geo.rotateX(-Math.PI/2);
     const pos=geo.attributes.position; const zOff=185;
     const colors=[]; const tmp=new THREE.Color();
-    const cDirt=new THREE.Color(0xb87b40), cTrail=new THREE.Color(0xa06a38),
-          cGrass=new THREE.Color(0x62a83c), cRock=new THREE.Color(0x9a8f80);
+    const cDirt=new THREE.Color(0xd08a3a), cTrail=new THREE.Color(0xb56a28),
+          cGrass=new THREE.Color(0x63c23e), cRock=new THREE.Color(0xa89a86);
     for(let i=0;i<pos.count;i++){
       const x=pos.getX(i), z=pos.getZ(i)+zOff;
       pos.setY(i, terrainHeight(x,z));
@@ -305,7 +326,7 @@
     }
     geo.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
     geo.computeVertexNormals();
-    const mat=new THREE.MeshStandardMaterial({map:makeDirtTexture(),vertexColors:true,roughness:0.96,metalness:0});
+    const mat=new THREE.MeshToonMaterial({vertexColors:true,gradientMap:TOON});
     terrainMesh=new THREE.Mesh(geo,mat); terrainMesh.position.z=zOff; terrainMesh.receiveShadow=true;
     scene.add(terrainMesh);
   }
@@ -416,9 +437,9 @@
   function buildScenery(){
     // pine trees
     const trunkGeo=new THREE.CylinderGeometry(0.2,0.32,1.8,6);
-    const trunkMat=new THREE.MeshStandardMaterial({color:0x6b4a2c,roughness:1});
+    const trunkMat=new THREE.MeshToonMaterial({color:0x7a4e28,gradientMap:TOON});
     const folGeo=new THREE.ConeGeometry(1.7,5,8);
-    const folMat=new THREE.MeshStandardMaterial({color:0x2f6b34,roughness:1,flatShading:true});
+    const folMat=new THREE.MeshToonMaterial({color:0x39ad4b,gradientMap:TOON});
     const N=120; const trunks=new THREE.InstancedMesh(trunkGeo,trunkMat,N), fols=new THREE.InstancedMesh(folGeo,folMat,N);
     fols.castShadow=true;
     const m=new THREE.Matrix4(),q=new THREE.Quaternion(),s=new THREE.Vector3(),p=new THREE.Vector3();
@@ -436,7 +457,7 @@
 
     // rocks
     const rockGeo=new THREE.DodecahedronGeometry(1,0);
-    const rockMat=new THREE.MeshStandardMaterial({color:0x9a9186,roughness:1,flatShading:true});
+    const rockMat=new THREE.MeshToonMaterial({color:0xa89c8e,gradientMap:TOON});
     const R=70; const rocks=new THREE.InstancedMesh(rockGeo,rockMat,R); rocks.castShadow=rocks.receiveShadow=true;
     let ri=0; guard=0;
     while(ri<R && guard++<3000){
@@ -475,10 +496,10 @@
   // ---------- bike ----------
   function buildBike(){
     const g=new THREE.Group();
-    const tireMat=new THREE.MeshStandardMaterial({color:0x111111,roughness:0.85});
-    const rimMat=new THREE.MeshStandardMaterial({color:0xcfd4d9,roughness:0.3,metalness:0.9});
-    const red=new THREE.MeshStandardMaterial({color:0xd8241a,roughness:0.4,metalness:0.05});
-    const black=new THREE.MeshStandardMaterial({color:0x1a1c20,roughness:0.5,metalness:0.3});
+    const tireMat=new THREE.MeshToonMaterial({color:0x18181a,gradientMap:TOON});
+    const rimMat=new THREE.MeshToonMaterial({color:0xdfe4ea,gradientMap:TOON});
+    const red=new THREE.MeshToonMaterial({color:0xe0231a,gradientMap:TOON});
+    const black=new THREE.MeshToonMaterial({color:0x24262c,gradientMap:TOON});
     const R=0.48;
     function wheel(zpos){
       const w=new THREE.Group();
@@ -498,9 +519,9 @@
 
     // rider (red/black gear like the reference)
     const rider=new THREE.Group();
-    const jersey=new THREE.MeshStandardMaterial({color:0xd8241a,roughness:0.6});
-    const pants=new THREE.MeshStandardMaterial({color:0x14161a,roughness:0.7});
-    const helmet=new THREE.MeshStandardMaterial({color:0xe8e8e8,roughness:0.35});
+    const jersey=new THREE.MeshToonMaterial({color:0xe0231a,gradientMap:TOON});
+    const pants=new THREE.MeshToonMaterial({color:0x1a1c22,gradientMap:TOON});
+    const helmet=new THREE.MeshToonMaterial({color:0xf0f0f0,gradientMap:TOON});
     const torso=new THREE.Mesh(new THREE.BoxGeometry(0.36,0.5,0.3),jersey); torso.position.set(0,R+1.04,-0.16);
     const hips=new THREE.Mesh(new THREE.BoxGeometry(0.34,0.24,0.32),pants); hips.position.set(0,R+0.8,-0.3);
     const head=new THREE.Mesh(new THREE.SphereGeometry(0.18,16,16),helmet); head.position.set(0,R+1.42,-0.03);
@@ -514,6 +535,7 @@
     rider.add(torso,hips,head,visor,armL,armR,legL,legR);
     rider.traverse(o=>{if(o.isMesh)o.castShadow=true;});
     bike.rider=rider; g.add(rider);
+    addOutlines(g, 1.09);
     bike.g=g; scene.add(g);
   }
 
@@ -521,6 +543,7 @@
     S.x=trailX(0); S.z=0; S.speed=0; S.yaw=0; S.vy=0;
     S.y=terrainHeight(S.x,S.z); S.grounded=true; S.airborne=false; S.airTime=0;
     S.airPitch=0; S.airPitchVel=0; S.lean=0; S.spinAccum=0; S.crashed=false; S.crashT=0;
+    S.landSquash=0;
     if(full){ S.time=0; S.finished=false; }
     tilt.calibrated=false;
   }
@@ -581,23 +604,31 @@
     if(S.grounded){
       const followVy=(gy-(oldGround+RIDE))/dt;
       if(S.vy>followVy+0.6 && S.vy>1.5){
-        S.grounded=false; S.airborne=true; S.airTime=0; S.spinAccum=0; S.airPitch=0; S.airPitchVel=0;
+        // crest a kicker -> go airborne, carrying the ramp attitude (no snap, gentle nose-up kick)
+        S.grounded=false; S.airborne=true; S.airTime=0; S.spinAccum=0;
+        S.airPitch=-S.pitchGround; S.airPitchVel=-1.0;
         S.vy-=GRAV*dt; S.y+=S.vy*dt;
       } else { S.vy=followVy; S.y=gy; }
     } else {
       S.vy-=GRAV*dt; S.y+=S.vy*dt; S.airTime+=dt;
-      const a=(input.throttle?1:0)-(input.brake?1:0);
-      S.airPitchVel+=a*5.5*dt; S.airPitchVel+=-Math.sin(S.airPitch)*2.4*dt; S.airPitchVel*=0.985;
-      S.airPitch+=S.airPitchVel*dt; S.spinAccum+=S.airPitchVel*dt;
+      // Air control: GAS = lean back (nose UP, the safe direction), BRAKE = nose down.
+      const a=(input.brake?1:0)-(input.throttle?1:0);
+      S.airPitchVel += a*3.6*dt;
+      // pendulum self-leveling toward a slightly nose-up landing attitude -> never faceplants
+      const target=-0.10;
+      S.airPitchVel += -Math.sin(S.airPitch-target)*3.4*dt;
+      S.airPitchVel *= 0.93;
+      S.airPitch += S.airPitchVel*dt; S.spinAccum += S.airPitchVel*dt;
       if(S.y<=gy){
+        // Landing: always plant cleanly with a suspension squash — no wipeouts on jumps.
         S.y=gy; S.grounded=true; const wasAir=S.airborne; S.airborne=false;
         if(wasAir){
           if(S.airTime>S.bestAir) S.bestAir=S.airTime;
+          S.landSquash=Math.min(0.4,Math.abs(S.vy)*0.022);
           const rot=Math.abs(S.spinAccum); const newFlips=Math.floor(rot/(Math.PI*2));
-          const off=Math.abs(((S.airPitch+Math.PI)%(Math.PI*2))-Math.PI);
-          if(off>2.1 && rot<Math.PI*2*0.7){ crash(); }
-          else { if(newFlips>0){ S.flips+=newFlips; flash(newFlips+' FLIP'+(newFlips>1?'S':'')+'! 🤸'); }
-                 else if(S.airTime>0.9) flash('HUGE AIR! '+S.airTime.toFixed(1)+'s'); }
+          if(newFlips>0){ S.flips+=newFlips; flash(newFlips+' BACKFLIP'+(newFlips>1?'S':'')+'! 🤸'); }
+          else if(S.airTime>1.0) flash('HUGE AIR! '+S.airTime.toFixed(1)+'s');
+          else if(S.airTime>0.5) flash('NICE AIR!');
           S.airPitch=0; S.spinAccum=0;
         }
         S.vy=0;
@@ -611,6 +642,7 @@
     S.rollGround=lerp(S.rollGround,Math.asin(clamp(slopeR,-1,1)),0.2);
 
     S.wheelSpin-=S.speed*dt/0.48;
+    S.landSquash=Math.max(0,S.landSquash-dt*1.6);
     if(S.grounded && S.speed>3 && (input.throttle||S.speed>8)) spawnDirt(S.x-fx*0.8,S.y+0.1,S.z-fz*0.8,fx,fz);
 
     // finish
@@ -629,10 +661,13 @@
 
   function updateTransforms(){
     const g=bike.g; g.position.set(S.x,S.y,S.z); g.rotation.order='YXZ'; g.rotation.y=S.yaw;
-    g.rotation.x=S.grounded?-S.pitchGround:S.airPitch;
+    // subtle wheelie under gas / dive under brake, on the ground
+    const accelBias=S.grounded?((input.throttle?1:0)-(input.brake?1:0))*0.05*(0.4+0.6*S.speed/MAXSPEED):0;
+    g.rotation.x=(S.grounded?-S.pitchGround:S.airPitch) - accelBias;
     g.rotation.z=(S.grounded?-S.rollGround:0)+S.lean;
     for(const w of bike.wheels) w.rotation.x=S.wheelSpin;
-    if(bike.rider) bike.rider.position.y=S.airborne?0.12:0;
+    // suspension: rider dips on hard landings, lifts a touch in the air
+    if(bike.rider) bike.rider.position.y=S.airborne?0.14:-S.landSquash*0.5;
   }
 
   const camPos=new THREE.Vector3();
@@ -766,11 +801,12 @@
     renderer.outputColorSpace=THREE.SRGBColorSpace; appEl.appendChild(renderer.domElement);
 
     scene=new THREE.Scene();
-    scene.background=new THREE.Color(0xbfe0f5);
-    scene.fog=new THREE.FogExp2(0xcfe6f5,0.0052);
+    scene.background=new THREE.Color(0x8fd0ff);
+    scene.fog=new THREE.FogExp2(0xbfe4ff,0.0030);
     camera=new THREE.PerspectiveCamera(64,innerWidth/innerHeight,0.1,900);
 
-    scene.add(new THREE.HemisphereLight(0xcfe6ff,0x6b5334,1.0));
+    TOON=makeToonRamp();
+    scene.add(new THREE.HemisphereLight(0xdff0ff,0x7a5a38,1.15));
     sun=new THREE.DirectionalLight(0xfff3da,2.4); sun.position.set(34,60,-24); sun.castShadow=true;
     sun.shadow.mapSize.set(1024,1024); sun.shadow.camera.near=1; sun.shadow.camera.far=170;
     sun.shadow.camera.left=-32; sun.shadow.camera.right=32; sun.shadow.camera.top=32; sun.shadow.camera.bottom=-32;
